@@ -1,5 +1,5 @@
 {
-  "name": "india-business-mcp-server",
+  "name": "@denispaul/india-business-mcp-server",
   "version": "1.0.0",
   "description": "An MCP server for Indian business data: IFSC, PIN code, GSTIN, PAN validation",
   "type": "module",
@@ -11,7 +11,7 @@
     "build"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/lf.js",
     "watch": "tsc -w",
     "start": "node build/index.js",
     "prepublishOnly": "npm run build"
