@@ -150,7 +150,7 @@ Once published to NPM, you can run the server directly using `npx`:
       "command": "npx",
       "args": [
         "-y",
-        "india-business-mcp-server"
+        "@denispaul/india-business-mcp-server"
       ]
     }
   }
