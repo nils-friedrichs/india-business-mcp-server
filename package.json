@@ -1,6 +1,6 @@
 {
   "name": "@denispaul/india-business-mcp-server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "An MCP server for Indian business data: IFSC, PIN code, GSTIN, PAN validation",
   "type": "module",
   "main": "build/index.js",
