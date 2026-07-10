@@ -1,0 +1,27 @@
+{
+  "name": "india-business-mcp-server",
+  "version": "1.0.0",
+  "description": "An MCP server for Indian business data: IFSC, PIN code, GSTIN, PAN validation",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "india-business-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "start": "node build/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}

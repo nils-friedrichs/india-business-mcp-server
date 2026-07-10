@@ -1,0 +1,232 @@
+# Indian Business Data MCP Server 🇮🇳
+
+An open-source Model Context Protocol (MCP) server that packages a cluster of free, no-auth-key public APIs and offline verification logic for Indian business, checkout, and logistics lookup.
+
+This server enables LLM clients (like Claude Desktop, Cursor, etc.) to query real-time Indian bank branch details, postal PIN codes, validate GSTIN/PAN structures, check e-commerce serviceability, and compute GST breakdowns directly within your chat session.
+
+---
+
+## Why I Built This
+
+Every developer building fintech, checkout flows, e-commerce, or logistics tools in India spends hours hand-rolling lookup integrations for bank branches, state codes, and postal divisions. And since there wasn't a unified, open-source Model Context Protocol (MCP) server for this, LLMs like Claude or Cursor couldn't inspect or auto-fill these fields mid-workflow.
+
+This server bridges that gap by grouping free, keyless public APIs and offline verification logic (like GSTIN Mod-36 check digits) into a single plug-and-play local server.
+
+---
+
+## ⚠️ Disclaimer & Scope
+
+This server performs **structural validation** (e.g., verifying a GSTIN's Mod-36 checksum, checking PAN pattern syntax). It does **not** query official databases (like NSDL or the GST portal) to verify if the identifiers are active or registered to a real entity. This is an auxiliary utility for forms, routing, and autocomplete, not a replacement for official, paid KYC/verification APIs.
+
+---
+
+## Tools Included
+
+### 1. `lookup_ifsc`
+* **Description**: Queries bank, branch, address, contact, and supported payment features (UPI, IMPS, NEFT, RTGS) from an 11-digit IFSC code.
+* **Upstream API**: Razorpay's public IFSC API (`https://ifsc.razorpay.com/`) - free, no key.
+* **Features**: Automated local regex checking and a 24-hour local TTL cache.
+
+### 2. `lookup_pincode`
+* **Description**: Resolves a 6-digit Indian PIN code to a list of post offices, divisions, districts, states, and circles.
+* **Upstream API**: India Post's public API (`https://api.postalpincode.in/`) - free, no key.
+* **Features**: Automated local formatting validation and a 24-hour local TTL cache.
+
+### 3. `validate_gstin`
+* **Description**: Verifies a 15-digit GSTIN (Goods and Services Tax Identification Number) locally.
+* **Features**:
+  * Full structural regex check.
+  * Offline Mod-36 weighted sum checksum validation.
+  * Extracts registered Indian State/UT name, PAN, and Taxpayer/Entity Type (e.g. Individual, Company, Firm, LLP, Trust).
+
+### 4. `validate_pan`
+* **Description**: Validates format and structure of a 10-character Permanent Account Number (PAN) card locally.
+* **Features**:
+  * Full structural regex check.
+  * Extracts the legal entity type of the holder (Individual, HUF, Firm, LLP, Company, Government, Trust, etc.).
+
+### 5. `check_pincode_serviceability`
+* **Description**: Custom utility to check if a PIN code belongs to specific allowed states or districts. Useful for managing serviceable checkout/delivery zones in e-commerce workflows.
+
+### 6. `calculate_gst_tax`
+* **Description**: Computes GST tax breakdowns (CGST, SGST, IGST) automatically.
+  * Validates the seller's GSTIN and matches the seller's registration state against the buyer's state.
+  * Handles exclusive and inclusive tax calculations.
+  * Routes taxes to CGST+SGST (if intra-state) or IGST (if inter-state).
+
+---
+
+## Demo & Examples (Proof it Works)
+
+Here is how the tools respond directly in an LLM client:
+
+### Example 1: Resolving IFSC branch details
+**Prompt**: *"What is the branch address and state for IFSC `HDFC0000123`?"*
+
+**Claude Tool Call**:
+```json
+{
+  "name": "lookup_ifsc",
+  "arguments": {
+    "ifsc": "HDFC0000123"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "isValid": true,
+  "data": {
+    "ifsc": "HDFC0000123",
+    "bank": "HDFC Bank",
+    "branch": "MADURAI - TAMIL NADU",
+    "address": "NO. 7-A WEST VELI STREETMADURAITAMILNADU625 001",
+    "city": "MADURAI",
+    "district": "MADURAI",
+    "state": "TAMIL NADU",
+    "contact": "+919840673333",
+    "upi": true,
+    "rtgs": true,
+    "neft": true,
+    "imps": true
+  }
+}
+```
+
+### Example 2: Calculating Tax Breakdown
+**Prompt**: *"Calculate 18% GST tax breakdown for a ₹10,000 service sold by a seller with GSTIN `27AAPFU0939F1ZV` to a buyer in Karnataka."*
+
+**Claude Tool Call**:
+```json
+{
+  "name": "calculate_gst_tax",
+  "arguments": {
+    "amount": 10000,
+    "rate": 18,
+    "sellerGstin": "27AAPFU0939F1ZV",
+    "buyerStateCodeOrName": "Karnataka"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "isValid": true,
+  "sellerState": "Maharashtra",
+  "buyerState": "Karnataka",
+  "isInterState": true,
+  "breakdown": {
+    "baseAmount": 10000,
+    "cgstRate": 0,
+    "cgstAmount": 0,
+    "sgstRate": 0,
+    "sgstAmount": 0,
+    "igstRate": 18,
+    "igstAmount": 1800,
+    "totalGstRate": 18,
+    "totalGstAmount": 1800,
+    "totalAmount": 11800
+  }
+}
+```
+
+---
+
+## Setup & Configuration
+
+### Prerequisites
+* **Node.js** (v18.0.0 or higher recommended for native fetch support).
+* **npm** (comes with Node.js).
+
+### Option A: Quick Run (via NPM Registry)
+Once published to NPM, you can run the server directly using `npx`:
+
+```json
+{
+  "mcpServers": {
+    "india-business-data": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "india-business-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+### Option B: Local Source Installation & Build
+
+1. Clone the project to your chosen workspace directory:
+   ```bash
+   git clone https://github.com/denispaul2406/india-business-mcp-server.git
+   cd india-business-mcp-server
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Compile the TypeScript codebase:
+   ```bash
+   npm run build
+   ```
+
+---
+
+## Integration Guides
+
+### 1. Claude Desktop App
+To connect the server to Claude Desktop, edit your `claude_desktop_config.json` file.
+
+* **Windows Path**: `%appdata%\Claude\claude_desktop_config.json`
+* **macOS/Linux Path**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Add the server using your local build path:
+
+```json
+{
+  "mcpServers": {
+    "india-business-data": {
+      "command": "node",
+      "args": [
+        "/path/to/india-business-mcp-server/build/index.js"
+      ]
+    }
+  }
+}
+```
+
+Restart Claude Desktop, and you will see the tool icon appear in the chat prompt.
+
+### 2. Cursor IDE
+To connect the server to Cursor:
+1. Open Cursor Settings -> **Features** -> **MCP**.
+2. Click **+ Add New MCP Server**.
+3. Configure as:
+   - **Name**: `india-business-data`
+   - **Type**: `stdio`
+   - **Command**: `node /path/to/india-business-mcp-server/build/index.js`
+4. Save and look for the green status light indicating it's active.
+
+---
+
+## Local Verification & Development
+
+You can dry-run the core logic and cache verification using our prebuilt test script:
+```bash
+node build/test.js
+```
+
+---
+
+## License
+MIT License. Feel free to copy, modify, and build upon this for your projects!
+
+---
+
+## 👤 Author & Connect
+* **GitHub**: [github.com/denispaul2406](https://github.com/denispaul2406)
+* **LinkedIn**: [linkedin.com/in/DenisPaul](https://linkedin.com/in/denis-paul-11b70932b)
+
