@@ -4,6 +4,8 @@ import { validateGstin } from "./tools/gstin.js";
 import { validatePan } from "./tools/pan.js";
 import { checkPincodeServiceability } from "./tools/serviceability.js";
 import { calculateGstTax } from "./tools/gstCalculator.js";
+import { verifyFreelanceContractor } from "./tools/compliance.js";
+import { bulkValidateGstins, bulkValidatePans, bulkLookupIfscs } from "./tools/batch.js";
 
 async function runTests() {
   console.log("=========================================");
@@ -80,6 +82,34 @@ async function runTests() {
 
   console.log(`\nInclusive tax check (Seller: Maharashtra, Buyer: Karnataka, inclusive=true):`);
   console.log(JSON.stringify(calculateGstTax(1180, 18, seller, "29", true), null, 2)); // 29 is Karnataka
+  console.log("\n");
+
+  // Test 7: Contractor Compliance
+  console.log("--- 7. Testing Freelance Contractor Compliance Verification ---");
+  console.log("Onboarding Individual Freelancer (Matching PAN & GSTIN):");
+  console.log(JSON.stringify(verifyFreelanceContractor("AAPPU0939F", "27AAPPU0939F1ZA"), null, 2));
+
+  console.log("\nOnboarding Individual Freelancer (No GSTIN provided):");
+  console.log(JSON.stringify(verifyFreelanceContractor("AAPPU0939F"), null, 2));
+
+  console.log("\nOnboarding Corporate Contractor (Company PAN, Matching GSTIN):");
+  console.log(JSON.stringify(verifyFreelanceContractor("AAPCU0939F", "27AAPCU0939F1Z1"), null, 2));
+
+  console.log("\nOnboarding Contractor (PAN & GSTIN Mismatch):");
+  console.log(JSON.stringify(verifyFreelanceContractor("AAPPU0000A", "27AAPPU0939F1ZA"), null, 2));
+  console.log("\n");
+
+  // Test 8: Batch Validation
+  console.log("--- 8. Testing Batch/Bulk Verification ---");
+  console.log("Bulk PAN Validation:");
+  console.log(JSON.stringify(bulkValidatePans(["AAPFU0939F", "INVALIDPAN", "AAPFC0939F"]), null, 2));
+
+  console.log("\nBulk GSTIN Validation:");
+  console.log(JSON.stringify(bulkValidateGstins(["27AAPFU0939F1ZV", "INVALIDGSTIN"]), null, 2));
+
+  console.log("\nBulk IFSC Lookup (with caching verification):");
+  console.log(JSON.stringify(await bulkLookupIfscs(["HDFC0000123", "BARB0COLABA"]), null, 2));
+
   console.log("\n=========================================");
 }
 

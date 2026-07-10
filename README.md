@@ -1,10 +1,11 @@
-# Indian Business Data MCP Server 🇮🇳
+# Indian Contractor Compliance & Onboarding MCP Server 🇮🇳
 
 [![CI](https://github.com/denispaul2406/india-business-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/denispaul2406/india-business-mcp-server/actions/workflows/ci.yml)
+[![smithery badge](https://smithery.ai/badge/@denispaul/india-business-mcp-server)](https://smithery.ai/server/@denispaul/india-business-mcp-server)
 
-An open-source Model Context Protocol (MCP) server that packages a cluster of free, no-auth-key public APIs and offline verification logic for Indian business, checkout, and logistics lookup.
+An open-source Model Context Protocol (MCP) server designed to streamline tax withholding (TDS), verification, and invoicing compliance when hiring and paying Indian freelance developers and independent contractors. Exposes public data APIs, local tax-compliance rules, and validation tools directly to LLM agents (like Claude Desktop or Cursor).
 
-This server enables LLM clients (like Claude Desktop, Cursor, etc.) to query real-time Indian bank branch details, postal PIN codes, validate GSTIN/PAN structures, check e-commerce serviceability, and compute GST breakdowns directly within your chat session.
+This server enables LLM clients to verify contractor identities, cross-reference GSTIN and PAN alignment, compute tax withholding (TDS) percentages (e.g., Section 194J vs. 194C), validate banking details (IFSC), and verify delivery zone serviceability.
 
 ## 🏗️ Architecture Flow
 
@@ -33,15 +34,15 @@ graph TD
 
 ## Why I Built This
 
-Every developer building fintech, checkout flows, e-commerce, or logistics tools in India spends hours hand-rolling lookup integrations for bank branches, state codes, and postal divisions. And since there wasn't a unified, open-source Model Context Protocol (MCP) server for this, LLMs like Claude or Cursor couldn't inspect or auto-fill these fields mid-workflow.
+Every company hiring remote Indian software developers or onboarding independent contractors spends hours validating their tax identifiers (PAN, GSTIN), verifying payout destination branch details (IFSC), and calculating withholding tax (TDS) brackets (e.g. Section 194J vs 194C). Because these systems are usually verified manually, LLM agents running contractor onboarding pipelines couldn't inspect or cross-reference these rules mid-workflow.
 
-This server bridges that gap by grouping free, keyless public APIs and offline verification logic (like GSTIN Mod-36 check digits) into a single plug-and-play local server.
+This server bridges that gap by grouping tax compliance rules, bank lookups, and offline structural validators into a single plug-and-play local server, allowing AI agents to fully handle freelancer onboarding verification.
 
 ---
 
 ## ⚠️ Disclaimer & Scope
 
-This server performs **structural validation** (e.g., verifying a GSTIN's Mod-36 checksum, checking PAN pattern syntax). It does **not** query official databases (like NSDL or the GST portal) to verify if the identifiers are active or registered to a real entity. This is an auxiliary utility for forms, routing, and autocomplete, not a replacement for official, paid KYC/verification APIs.
+This server performs **structural validation** (e.g., verifying a GSTIN's Mod-36 checksum, checking PAN pattern syntax, and checking PAN-GSTIN matching logic). It does **not** query official databases (like NSDL or the GST portal) to verify if the identifiers are active or registered to a real entity. This is an auxiliary utility for onboarding, forms, routing, and autocomplete, not a replacement for official, paid KYC/verification APIs.
 
 ---
 
@@ -82,6 +83,24 @@ This server implements both **Tools** (executable actions) and **Resources** (da
   * Validates the seller's GSTIN and matches the seller's registration state against the buyer's state.
   * Handles exclusive and inclusive tax calculations.
   * Routes taxes to CGST+SGST (if intra-state) or IGST (if inter-state).
+
+#### 7. `verify_freelance_contractor`
+* **Description**: Evaluates an Indian freelancer or contractor for onboarding and tax compliance (TDS withholding brackets under Section 194J/194C, PAN-GSTIN matching, entity classification).
+* **Features**:
+  * Offline-first validation and verification.
+  * Cross-checks if the PAN embedded inside the GSTIN matches the standalone PAN.
+  * Classifies Holder Type (Individual vs Corporate entity) based on the 4th letter of the PAN.
+  * Computes appropriate TDS withholding rate brackets (e.g. 2% for Technical Services under Section 194J, 1% for Individual Contractors under 194C, 2% for Corporate Contractors under 194C, and a 20% penalty withholding alert under Section 206AA if PAN is invalid).
+  * Returns actionable warnings and recommendations for compliance and banking audits.
+
+#### 8. `bulk_validate_gstins`
+* **Description**: Validates a batch of GSTIN codes in a single request (maximum 50 items). Returns verification status, state registrations, and taxpayer types.
+
+#### 9. `bulk_validate_pans`
+* **Description**: Validates a batch of PAN card numbers in a single request (maximum 50 items). Returns validation status and entity classifications.
+
+#### 10. `bulk_lookup_ifsc`
+* **Description**: Performs batch bank branch lookups for a list of IFSC codes in a single call (maximum 50 items). Optimizes speed by retrieving details from the 24-hour cache where available.
 
 ### 📂 Resources
 
@@ -207,6 +226,43 @@ Instead of calling tools in isolation, an LLM agent (like Claude or Cursor) can 
     "totalGstAmount": 1800,
     "totalAmount": 11800
   }
+}
+```
+
+### Example 3: Onboarding Contractor Verification
+**Prompt**: *"Run onboarding compliance check for a contractor with PAN `AAPPU0939F` and GSTIN `27AAPPU0939F1ZA`."*
+
+**Claude Tool Call**:
+```json
+{
+  "name": "verify_freelance_contractor",
+  "arguments": {
+    "pan": "AAPPU0939F",
+    "gstin": "27AAPPU0939F1ZA"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "panValid": true,
+  "gstinValid": true,
+  "gstinProvided": true,
+  "entityType": "P",
+  "entityTypeName": "Individual (Proprietorship)",
+  "isIndividualFreelancer": true,
+  "panGstinMatch": true,
+  "tdsWithholdingSection": "Section 194J (Technical Services) / Section 194C (Contractor)",
+  "tdsStandardRatePercent": "2% (Technical Services/Software) or 1% (General Contract)",
+  "tdsRateAppliedPercent": 2,
+  "complianceStatus": "MATCHED",
+  "warnings": [],
+  "recommendations": [
+    "For software development or coding consulting, deduct 2% TDS under Section 194J.",
+    "For general outsourcing contracts (non-technical), deduct 1% TDS under Section 194C.",
+    "The contractor has a valid GSTIN. Verify that their invoices charge the standard 18% GST for services and display their GSTIN."
+  ]
 }
 ```
 

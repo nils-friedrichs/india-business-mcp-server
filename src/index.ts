@@ -13,6 +13,8 @@ import { validateGstin, STATE_CODES } from "./tools/gstin.js";
 import { validatePan } from "./tools/pan.js";
 import { checkPincodeServiceability } from "./tools/serviceability.js";
 import { calculateGstTax } from "./tools/gstCalculator.js";
+import { verifyFreelanceContractor } from "./tools/compliance.js";
+import { bulkValidateGstins, bulkValidatePans, bulkLookupIfscs } from "./tools/batch.js";
 
 const server = new Server(
   {
@@ -212,6 +214,69 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["amount", "rate", "sellerGstin", "buyerStateCodeOrName"],
         },
       },
+      {
+        name: "verify_freelance_contractor",
+        description: "Evaluates an Indian contractor/freelancer for onboarding tax and compliance. Performs structural checks on PAN and GSTIN, matches them, extracts entity type, and computes Section 194J/194C TDS (withholding tax) brackets.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pan: {
+              type: "string",
+              description: "The 10-character PAN number of the contractor (e.g. 'ABCDE1234F').",
+            },
+            gstin: {
+              type: "string",
+              description: "Optional 15-character GSTIN of the contractor (e.g. '27AAPFU0939F1ZV').",
+            },
+          },
+          required: ["pan"],
+        },
+      },
+      {
+        name: "bulk_validate_gstins",
+        description: "Validates a list of GSTINs in bulk (maximum 50 items). Returns status, extracted PAN, entity type, and state information for each.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            gstins: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of 15-character GSTIN strings.",
+            },
+          },
+          required: ["gstins"],
+        },
+      },
+      {
+        name: "bulk_validate_pans",
+        description: "Validates a list of PAN card numbers in bulk (maximum 50 items). Returns structural status and legal entity types.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pans: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of 10-character PAN strings.",
+            },
+          },
+          required: ["pans"],
+        },
+      },
+      {
+        name: "bulk_lookup_ifsc",
+        description: "Performs real-time lookups for multiple IFSC bank branch codes in bulk (maximum 50 items). Returns cached or live branch details.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ifscs: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of 11-character IFSC codes.",
+            },
+          },
+          required: ["ifscs"],
+        },
+      },
     ],
   };
 });
@@ -307,6 +372,63 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           isError: !result.isValid
+        };
+      }
+
+      case "verify_freelance_contractor": {
+        if (!args || typeof args.pan !== "string") {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ isValid: false, error: "Missing or invalid 'pan' argument." }) }],
+            isError: true
+          };
+        }
+        const gstin = typeof args.gstin === "string" ? args.gstin : undefined;
+        const result = verifyFreelanceContractor(args.pan, gstin);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          isError: !result.panValid || (result.gstinProvided && result.gstinValid === false)
+        };
+      }
+
+      case "bulk_validate_gstins": {
+        if (!args || !Array.isArray(args.gstins)) {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ isValid: false, error: "Missing or invalid 'gstins' array." }) }],
+            isError: true
+          };
+        }
+        const result = bulkValidateGstins(args.gstins.map(String));
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          isError: false
+        };
+      }
+
+      case "bulk_validate_pans": {
+        if (!args || !Array.isArray(args.pans)) {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ isValid: false, error: "Missing or invalid 'pans' array." }) }],
+            isError: true
+          };
+        }
+        const result = bulkValidatePans(args.pans.map(String));
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          isError: false
+        };
+      }
+
+      case "bulk_lookup_ifsc": {
+        if (!args || !Array.isArray(args.ifscs)) {
+          return {
+            content: [{ type: "text", text: JSON.stringify({ isValid: false, error: "Missing or invalid 'ifscs' array." }) }],
+            isError: true
+          };
+        }
+        const result = await bulkLookupIfscs(args.ifscs.map(String));
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          isError: false
         };
       }
 
