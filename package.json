@@ -10,6 +10,14 @@
   "files": [
     "build"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/denispaul2406/india-business-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/denispaul2406/india-business-mcp-server/issues"
+  },
+  "homepage": "https://github.com/denispaul2406/india-business-mcp-server#readme",
   "scripts": {
     "build": "tsc && node scripts/lf.js",
     "watch": "tsc -w",
