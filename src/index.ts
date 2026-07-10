@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { 
+  CallToolRequestSchema, 
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema
+} from "@modelcontextprotocol/sdk/types.js";
 import { lookupIfsc } from "./tools/ifsc.js";
 import { lookupPincode } from "./tools/pincode.js";
-import { validateGstin } from "./tools/gstin.js";
+import { validateGstin, STATE_CODES } from "./tools/gstin.js";
 import { validatePan } from "./tools/pan.js";
 import { checkPincodeServiceability } from "./tools/serviceability.js";
 import { calculateGstTax } from "./tools/gstCalculator.js";
@@ -17,9 +22,81 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      resources: {},
     },
   }
 );
+
+// Register and list available static resources
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return {
+    resources: [
+      {
+        uri: "india-business://gst-slabs",
+        name: "Indian GST Rate Slabs Reference",
+        description: "Official GST tax rate slabs in India (5%, 12%, 18%, 28%) and which goods/services they apply to.",
+        mimeType: "text/markdown",
+      },
+      {
+        uri: "india-business://state-codes",
+        name: "GST State Codes Reference",
+        description: "Mapping of 2-digit GST state codes to Indian States and Union Territories.",
+        mimeType: "text/markdown",
+      }
+    ]
+  };
+});
+
+// Handle reading resource contents
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+
+  if (uri === "india-business://gst-slabs") {
+    const gstSlabsMarkdown = `# Indian GST Slabs Reference
+
+| Rate | Category | General Examples / Product Classes |
+| :---: | :--- | :--- |
+| **0%** (Exempt) | Essential Goods | Fresh fruits, vegetables, milk, salt, grain/flour, newspapers, books. |
+| **5%** | Common Items | Sugar, tea, coffee, edible oil, spices, life-saving drugs, economy air travel. |
+| **12%** | Standard (Low) | Butter, cheese, ghee, fruit juices, mobile phones, business air travel. |
+| **18%** | Standard (High) | Services (IT, consulting, SaaS, telecom, banking), capital goods, restaurants. |
+| **28%** | Luxury & Sin Goods | Automobiles, motorcycles, air conditioners, pan masala, soft drinks, luxury stays. |`;
+
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "text/markdown",
+          text: gstSlabsMarkdown
+        }
+      ]
+    };
+  }
+
+  if (uri === "india-business://state-codes") {
+    const stateCodesList = Object.entries(STATE_CODES)
+      .map(([code, name]) => `| **${code}** | ${name} |`)
+      .join("\n");
+
+    const stateCodesMarkdown = `# GST State Codes Reference
+
+| Code | State / Union Territory |
+| :---: | :--- |
+${stateCodesList}`;
+
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "text/markdown",
+          text: stateCodesMarkdown
+        }
+      ]
+    };
+  }
+
+  throw new Error(`Resource not found: ${uri}`);
+});
 
 // Register and list available tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {

@@ -1,8 +1,33 @@
 # Indian Business Data MCP Server 🇮🇳
 
+[![CI](https://github.com/denispaul2406/india-business-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/denispaul2406/india-business-mcp-server/actions/workflows/ci.yml)
+
 An open-source Model Context Protocol (MCP) server that packages a cluster of free, no-auth-key public APIs and offline verification logic for Indian business, checkout, and logistics lookup.
 
 This server enables LLM clients (like Claude Desktop, Cursor, etc.) to query real-time Indian bank branch details, postal PIN codes, validate GSTIN/PAN structures, check e-commerce serviceability, and compute GST breakdowns directly within your chat session.
+
+## 🏗️ Architecture Flow
+
+```mermaid
+graph TD
+    A[LLM Agent / Client] -->|Tool Call or Resource Read| B(MCP Server Entrypoint)
+    B --> C{Request Type}
+    C -->|IFSC / Pincode| D{24hr In-Memory Cache}
+    D -->|Hit| E[Return Cached JSON]
+    D -->|Miss| F[Fetch Upstream Public API]
+    F -->|Success| G[Update Cache & Return]
+    F -->|429 Rate Limit| H[Error: Rate Limit Message]
+    C -->|GSTIN / PAN| I[Local Regex & Checksum Logic]
+    C -->|Tax / Serviceability| J[Process with State & Zone Rules]
+    C -->|GST Slabs / State list| L[Read Static Resource Data]
+    I --> K[Return Output Payload]
+    J --> K
+    L --> K
+    E --> A
+    G --> A
+    H --> A
+    K --> A
+```
 
 ---
 
@@ -20,41 +45,57 @@ This server performs **structural validation** (e.g., verifying a GSTIN's Mod-36
 
 ---
 
-## Tools Included
+## Protocol Capabilities (Tools & Resources)
 
-### 1. `lookup_ifsc`
+This server implements both **Tools** (executable actions) and **Resources** (data/reference sheets) primitives from the Model Context Protocol specification. This allows LLM agents to both perform validation checks and read reference slabs for in-context reasoning.
+
+### 🛠️ Tools
+
+#### 1. `lookup_ifsc`
 * **Description**: Queries bank, branch, address, contact, and supported payment features (UPI, IMPS, NEFT, RTGS) from an 11-digit IFSC code.
 * **Upstream API**: Razorpay's public IFSC API (`https://ifsc.razorpay.com/`) - free, no key.
 * **Features**: Automated local regex checking and a 24-hour local TTL cache.
 
-### 2. `lookup_pincode`
+#### 2. `lookup_pincode`
 * **Description**: Resolves a 6-digit Indian PIN code to a list of post offices, divisions, districts, states, and circles.
 * **Upstream API**: India Post's public API (`https://api.postalpincode.in/`) - free, no key.
 * **Features**: Automated local formatting validation and a 24-hour local TTL cache.
 
-### 3. `validate_gstin`
+#### 3. `validate_gstin`
 * **Description**: Verifies a 15-digit GSTIN (Goods and Services Tax Identification Number) locally.
 * **Features**:
   * Full structural regex check.
   * Offline Mod-36 weighted sum checksum validation.
   * Extracts registered Indian State/UT name, PAN, and Taxpayer/Entity Type (e.g. Individual, Company, Firm, LLP, Trust).
 
-### 4. `validate_pan`
+#### 4. `validate_pan`
 * **Description**: Validates format and structure of a 10-character Permanent Account Number (PAN) card locally.
 * **Features**:
   * Full structural regex check.
   * Extracts the legal entity type of the holder (Individual, HUF, Firm, LLP, Company, Government, Trust, etc.).
 
-### 5. `check_pincode_serviceability`
+#### 5. `check_pincode_serviceability`
 * **Description**: Custom utility to check if a PIN code belongs to specific allowed states or districts. Useful for managing serviceable checkout/delivery zones in e-commerce workflows.
 
-### 6. `calculate_gst_tax`
+#### 6. `calculate_gst_tax`
 * **Description**: Computes GST tax breakdowns (CGST, SGST, IGST) automatically.
   * Validates the seller's GSTIN and matches the seller's registration state against the buyer's state.
   * Handles exclusive and inclusive tax calculations.
   * Routes taxes to CGST+SGST (if intra-state) or IGST (if inter-state).
 
----
+### 📂 Resources
+
+MCP Resources are read-only documents that LLM agents can pull to gain domain context on Indian business rules.
+
+#### 1. `india-business://gst-slabs`
+* **Name**: Indian GST Rate Slabs Reference
+* **MimeType**: `text/markdown`
+* **Content**: The official GST rate slabs in India (0%, 5%, 12%, 18%, 28%) and which goods/services they apply to.
+
+#### 2. `india-business://state-codes`
+* **Name**: GST State Codes Reference
+* **MimeType**: `text/markdown`
+* **Content**: Complete mapping of 2-digit GST state codes (e.g. `27` -> Maharashtra, `29` -> Karnataka) for cross-referencing state codes.
 
 ## Demo & Examples (Proof it Works)
 
@@ -67,6 +108,35 @@ Here is how the tools respond directly in an LLM client:
 
 ![MCP tool execution output inside Cursor Chat](./mcp-2.png)
 *Real-time tool execution in Cursor Chat returning Indian business data lookup results*
+
+### ⚡ End-to-End Agent Scenario: Processing a Payout Refund
+
+Instead of calling tools in isolation, an LLM agent (like Claude or Cursor) can chain these tools together to resolve a complete checkout business task.
+
+**User Prompt**:
+> *"Process a customer refund payout of ₹11,800 (GST inclusive, rate 18%) for a buyer located in Karnataka (pincode `560001`). Verify their pincode is serviceable under our 'Karnataka' delivery rules. Our company's seller GSTIN is `27AAPFU0939F1ZV` (registered in Maharashtra). If serviceable, calculate the CGST/SGST/IGST tax routing breakdown and lookup the bank branch details for their beneficiary IFSC code `HDFC0000123` so we can queue the payout transfer."*
+
+**How the Agent Solves It (Multi-Turn Tool Chaining)**:
+
+1. **Serviceability Check**:
+   The Agent calls `check_pincode_serviceability(pincode: "560001", allowedStates: ["Karnataka"])`.
+   * *Output*: Pincode `560001` belongs to Bangalore, Karnataka. Status: **Serviceable**.
+
+2. **GST Routing & Calculations**:
+   The Agent calls `calculate_gst_tax(amount: 11800, rate: 18, sellerGstin: "27AAPFU0939F1ZV", buyerStateCodeOrName: "Karnataka", inclusive: true)`.
+   * *Output*: The seller is registered in Maharashtra (`27`) and the buyer is in Karnataka (`29`). Because these are different states, it routes the entire tax as **IGST (₹1,800)** on a base amount of **₹10,000**.
+
+3. **Bank Transfer Destination Verification**:
+   The Agent calls `lookup_ifsc(ifsc: "HDFC0000123")`.
+   * *Output*: IFSC code resolves to **HDFC Bank, Madurai West Veli Street branch** (Tamil Nadu).
+
+**Final Agent Response**:
+> "Refund payout verified and calculated successfully:
+> 1. **Logistics**: Pincode `560001` is confirmed **serviceable** inside Karnataka.
+> 2. **Tax Routing**: Out-of-state transaction (Maharashtra to Karnataka), requiring **IGST (18%) routing**. Base amount is **₹10,000.00** and routed IGST is **₹1,800.00** (total invoice payout: ₹11,800.00).
+> 3. **Settlement**: Beneficiary bank branch is **HDFC Bank, Madurai branch**, West Veli Street. UPI, IMPS, NEFT, and RTGS are supported.
+> 
+> Transfer is ready to be queued for payout."
 
 ### Example 1: Resolving IFSC branch details
 **Prompt**: *"What is the branch address and state for IFSC `HDFC0000123`?"*
@@ -149,7 +219,7 @@ Here is how the tools respond directly in an LLM client:
 * **npm** (comes with Node.js).
 
 ### Option A: Quick Run (via NPM Registry)
-Once published to NPM, you can run the server directly using `npx`:
+Available on npm — run directly via `npx`:
 
 ```json
 {
