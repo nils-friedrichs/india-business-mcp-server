@@ -46,11 +46,9 @@ This server performs **structural validation** (e.g., verifying a GSTIN's Mod-36
 
 ---
 
-## Protocol Capabilities (Tools & Resources)
+## Tools
 
-This server implements both **Tools** (executable actions) and **Resources** (data/reference sheets) primitives from the Model Context Protocol specification. This allows LLM agents to both perform validation checks and read reference slabs for in-context reasoning.
-
-### 🛠️ Tools
+This server implements **Tools** (executable actions) from the Model Context Protocol specification. This allows LLM agents to perform validation checks, local compliance calculations, and branch lookups.
 
 #### 1. `lookup_ifsc`
 * **Description**: Queries bank, branch, address, contact, and supported payment features (UPI, IMPS, NEFT, RTGS) from an 11-digit IFSC code.
@@ -102,7 +100,7 @@ This server implements both **Tools** (executable actions) and **Resources** (da
 #### 10. `bulk_lookup_ifsc`
 * **Description**: Performs batch bank branch lookups for a list of IFSC codes in a single call (maximum 50 items). Optimizes speed by retrieving details from the 24-hour cache where available.
 
-### 📂 Resources
+## Resources
 
 MCP Resources are read-only documents that LLM agents can pull to gain domain context on Indian business rules.
 
@@ -325,12 +323,13 @@ Add the server using your local build path:
     "india-business-data": {
       "command": "node",
       "args": [
-        "/path/to/india-business-mcp-server/build/index.js"
+        "build/index.js"
       ]
     }
   }
 }
 ```
+*(Note: Because Claude Desktop runs globally, you must replace `"build/index.js"` with the absolute path to this folder on your machine, e.g. `"C:/Users/username/Desktop/mcp-server/build/index.js"`).*
 
 Restart Claude Desktop, and you will see the tool icon appear in the chat prompt.
 
@@ -341,7 +340,7 @@ To connect the server to Cursor:
 3. Configure as:
    - **Name**: `india-business-data`
    - **Type**: `stdio`
-   - **Command**: `node /path/to/india-business-mcp-server/build/index.js`
+   - **Command**: `node build/index.js` *(Note: Replace with the absolute path on your machine, e.g. `node C:/Users/username/Desktop/mcp-server/build/index.js`)*
 4. Save and look for the green status light indicating it's active.
 
 ---
