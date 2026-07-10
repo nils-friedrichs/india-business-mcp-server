@@ -60,6 +60,14 @@ This server performs **structural validation** (e.g., verifying a GSTIN's Mod-36
 
 Here is how the tools respond directly in an LLM client:
 
+### 📸 Live Demo in Cursor
+
+![Cursor Settings showing active MCP Server](./mcp-1.png)
+*Active configuration showing connected status in Cursor Settings*
+
+![MCP tool execution output inside Cursor Chat](./mcp-2.png)
+*Real-time tool execution in Cursor Chat returning Indian business data lookup results*
+
 ### Example 1: Resolving IFSC branch details
 **Prompt**: *"What is the branch address and state for IFSC `HDFC0000123`?"*
 
